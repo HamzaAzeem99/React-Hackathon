@@ -1,0 +1,215 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Poppins', 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Global Light & Dark Theme Variables */
+body.light-theme {
+  --bg-main: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  --bg-surface: #ffffff;
+  --text-main: #064e3b;
+  --text-muted: #059669;
+  --border-color: rgba(16, 185, 129, 0.15);
+  --shadow-out: 8px 8px 24px #cbd5e1, -8px -8px 24px #ffffff;
+  --shadow-in: inset 3px 3px 6px #cbd5e1, inset -3px -3px 6px #ffffff;
+  --row-hover: #f0fdf4;
+  --bg-green-gradient: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  --surface-white: #ffffff;
+  --text-dark: #1b5e20;
+  --text-muted-green: #4caf50;
+  --primary-green: #2e7d32;
+  --primary-green-hover: #1b5e20;
+  --border-light: rgba(255, 255, 255, 0.6);
+  background: #f0fdf4;
+  color: #064e3b;
+}
+
+body.dark-theme {
+  --bg-main: linear-gradient(135deg, #022c22 0%, #064e3b 100%);
+  --bg-surface: #064e3b;
+  --text-main: #f0fdf4;
+  --text-muted: #34d399;
+  --border-color: rgba(255, 255, 255, 0.06);
+  --shadow-out: 10px 10px 24px #01140f, -4px -4px 16px #053b2d;
+  --shadow-in: inset 4px 4px 8px #01140f, inset -2px -2px 6px #053b2d;
+  --row-hover: #043e2f;
+  --bg-green-gradient: linear-gradient(135deg, #022c22 0%, #064e3b 100%);
+  --surface-white: #064e3b;
+  --text-dark: #f0fdf4;
+  --text-muted-green: #34d399;
+  --primary-green: #10b981;
+  --primary-green-hover: #059669;
+  --border-light: rgba(255, 255, 255, 0.05);
+  --shadow-out: 8px 8px 20px #011611, -4px -4px 12px #043e2f;
+  --shadow-in: inset 3px 3px 6px #011611, inset -2px -2px 6px #043e2f;
+  background: #022c22;
+  color: #f0fdf4;
+}
+
+:root {
+  --primary-green-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --danger-red: #ef4444;
+  --warning-orange: #f59e0b;
+  --info-teal: #06b6d4;
+}
+
+/* --- GLOBAL SPINNER --- */
+.spinner-green {
+  width: 44px;
+  height: 44px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- GLOBAL ANIMATIONS --- */
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.45s ease-out;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Theme toggle button shared styles */
+.theme-toggle-btn {
+  background: var(--bg-surface, #ffffff);
+  color: var(--text-main, #064e3b);
+  border: 1px solid var(--border-color, rgba(16, 185, 129, 0.15));
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-out);
+  transition: all 0.25s ease;
+}
+
+.theme-toggle-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.theme-toggle-btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-in);
+}
+
+/* Global form element styles shared across pages */
+.form-group-3d {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-group-3d label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.form-group-3d input,
+.form-group-3d select,
+.form-group-3d textarea {
+  background: rgba(16, 185, 129, 0.04);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-in);
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  outline: none;
+  font-family: inherit;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+body.dark-theme .form-group-3d input,
+body.dark-theme .form-group-3d select,
+body.dark-theme .form-group-3d textarea {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.form-group-3d input:focus,
+.form-group-3d select:focus,
+.form-group-3d textarea:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* Selection highlight */
+::selection {
+  background: rgba(16, 185, 129, 0.25);
+  color: inherit;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.3);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.5);
+}
+
+/* Empty and loading states */
+.spinner-zone,
+.empty-zone {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
