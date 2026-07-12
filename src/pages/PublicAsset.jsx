@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { dataService } from '../utils/dataService';
+import { filterPublicHistory } from '../utils/permissions';
 import { 
   ShieldCheck, 
   MapPin, 
@@ -38,20 +39,8 @@ function PublicAsset({ darkMode, toggleTheme }) {
           setNotFound(true);
         } else {
           setAsset(foundAsset);
-          // Fetch timeline and filter out private information (no costs, no sensitive details)
           const timeline = await dataService.getHistory(foundAsset.asset_code);
-          const safeTimeline = timeline.map(event => {
-            // Strip out cost or technical names if present (PDF requirement)
-            let safeDetails = event.details;
-            if (safeDetails.includes('Cost:')) {
-              safeDetails = safeDetails.split('Cost:')[0].trim();
-            }
-            return {
-              ...event,
-              details: safeDetails
-            };
-          });
-          setHistory(safeTimeline);
+          setHistory(filterPublicHistory(timeline));
         }
       } catch (err) {
         console.error(err);
@@ -79,7 +68,7 @@ function PublicAsset({ darkMode, toggleTheme }) {
           <HelpCircle size={64} className="error-icon-glow" />
           <h2>404 - Identity Missing</h2>
           <p>This QR barcode does not match any registered records in our centralized system database.</p>
-          <button className="btn-error-home" onClick={() => navigate('/login')}>Go to Admin Panel</button>
+          <button className="btn-error-home" onClick={() => navigate('/asset/PROJ-01')}>Browse Sample Asset</button>
         </div>
       </div>
     );
@@ -180,6 +169,14 @@ function PublicAsset({ darkMode, toggleTheme }) {
               disabled={asset.status === 'Out of Service'}
             >
               ⚠️ Report Breakdown / Issue
+            </button>
+
+            <button
+              className="btn-report-now-green-3d"
+              style={{ marginTop: '0.75rem', background: 'transparent', border: '2px solid #10b981', color: 'inherit' }}
+              onClick={() => navigate('/track-issue')}
+            >
+              Track an Existing Issue
             </button>
           </div>
         )}

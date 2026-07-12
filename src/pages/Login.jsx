@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabase';
-import { Mail, Lock, LogIn, UserPlus, ShieldAlert, Sun, Moon, Shield, Wrench, User } from 'lucide-react';
+import { canAccessDashboard } from '../utils/permissions';
+import { Mail, Lock, LogIn, ShieldAlert, Sun, Moon, Shield, Wrench, QrCode } from 'lucide-react';
 import './Login.css';
 
 function Login({ onLoginSuccess, darkMode, toggleTheme }) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [fullName, setFullName] = useState('');
   const [message, setMessage] = useState('');
 
   const handleAuth = async (e) => {
@@ -17,44 +18,32 @@ function Login({ onLoginSuccess, darkMode, toggleTheme }) {
     setMessage('');
 
     try {
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
 
-        if (data.user) {
-          // Attempt to insert profile (will catch if table missing)
-          try {
-            await supabase
-              .from('profiles')
-              .insert([{ id: data.user.id, full_name: fullName, role: 'Reporter' }]);
-          } catch (pe) {
-            console.warn("Could not insert to profiles (offline or table missing):", pe.message);
-          }
-          setMessage('✨ Signup Successful! Check your email for verification.');
-        }
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        
-        setMessage('🔓 Login Successful! Redirecting...');
-        
-        // Fetch role from profile or default to Admin (based on email or simple fallback)
-        let role = 'Reporter';
-        if (email.toLowerCase().includes('admin')) {
-          role = 'Admin';
-        } else if (email.toLowerCase().includes('tech')) {
-          role = 'Technician';
-        }
-        
-        const mappedUser = {
-          ...data.user,
-          full_name: email.split('@')[0],
-          role: role
-        };
-        onLoginSuccess(mappedUser, false);
+      let role = 'Reporter';
+      if (email.toLowerCase().includes('admin')) {
+        role = 'Admin';
+      } else if (email.toLowerCase().includes('tech')) {
+        role = 'Technician';
       }
+
+      if (!canAccessDashboard(role)) {
+        await supabase.auth.signOut();
+        setMessage('Public users do not need to log in. Scan a QR code on any asset to report issues.');
+        return;
+      }
+
+      setMessage('Login successful! Redirecting...');
+
+      const mappedUser = {
+        ...data.user,
+        full_name: email.split('@')[0],
+        role
+      };
+      onLoginSuccess(mappedUser, false);
     } catch (error) {
-      setMessage(`❌ Error: ${error.message}`);
+      setMessage(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -62,26 +51,23 @@ function Login({ onLoginSuccess, darkMode, toggleTheme }) {
 
   const handleDemoLogin = (role) => {
     setLoading(true);
-    setMessage(`🔓 Authenticating as Demo ${role}...`);
-    
-    // Simulate auth lag
+    setMessage(`Authenticating as Demo ${role}...`);
+
     setTimeout(() => {
       const demoUser = {
         id: `demo_${role.toLowerCase()}`,
         email: `${role.toLowerCase()}@maintainiq.com`,
         full_name: `Demo ${role}`,
-        role: role
+        role
       };
-      
-      onLoginSuccess(demoUser, true); // True flag means mock/simulated login
+
+      onLoginSuccess(demoUser, true);
       setLoading(false);
     }, 600);
   };
 
   return (
     <div className={`login-container-green ${darkMode ? 'dark-theme' : 'light-theme'}`}>
-      
-      {/* Theme Toggle Button in Corner */}
       <div className="login-theme-toggle">
         <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle Theme">
           {darkMode ? <Sun size={18} /> : <Moon size={18} />}
@@ -91,53 +77,35 @@ function Login({ onLoginSuccess, darkMode, toggleTheme }) {
       <div className="login-card-green-3d animate-slide-up">
         <div className="login-header-green">
           <h2>MaintainIQ <span className="vip-tag-green">VIP Pro</span></h2>
-          <p>{isSignUp ? 'Create your professional account' : 'Sign in to manage system assets'}</p>
+          <p>Administrator &amp; Technician sign in only</p>
         </div>
 
         <form onSubmit={handleAuth} className="login-form-green">
-          {isSignUp && (
-            <div className="input-group-green-3d">
-              <label><User size={16} className="input-icon" /> Full Name</label>
-              <input 
-                type="text" 
-                placeholder="Enter full name" 
-                value={fullName} 
-                onChange={(e) => setFullName(e.target.value)} 
-                required 
-              />
-            </div>
-          )}
-
           <div className="input-group-green-3d">
             <label><Mail size={16} className="input-icon" /> Email Address</label>
-            <input 
-              type="email" 
-              placeholder="name@company.com" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              required 
+            <input
+              type="email"
+              placeholder="admin@company.com or tech@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
             />
           </div>
 
           <div className="input-group-green-3d">
             <label><Lock size={16} className="input-icon" /> Password</label>
-            <input 
-              type="password" 
-              placeholder="••••••••" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              required 
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
             />
           </div>
 
           <button type="submit" className="btn-login-green-3d" disabled={loading}>
             {loading ? (
-              <span>⏳ Processing...</span>
-            ) : isSignUp ? (
-              <>
-                <UserPlus size={18} />
-                <span>Sign Up As User</span>
-              </>
+              <span>Processing...</span>
             ) : (
               <>
                 <LogIn size={18} />
@@ -154,45 +122,43 @@ function Login({ onLoginSuccess, darkMode, toggleTheme }) {
           </div>
         )}
 
-        <div className="login-footer-green">
-          <p onClick={() => setIsSignUp(!isSignUp)}>
-            {isSignUp ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
+        <div className="demo-shortcuts-panel">
+          <div className="demo-title">
+            <SparklesIcon />
+            <span>Evaluator Demo Shortcuts</span>
+          </div>
+          <p>Bypass credential setup. Log in with pre-configured staff roles:</p>
+
+          <div className="demo-buttons-grid">
+            <button className="btn-demo-role admin-btn" onClick={() => handleDemoLogin('Admin')} title="Log in as Administrator">
+              <Shield size={16} />
+              <span>Demo Admin</span>
+            </button>
+
+            <button className="btn-demo-role tech-btn" onClick={() => handleDemoLogin('Technician')} title="Log in as Assigned Technician">
+              <Wrench size={16} />
+              <span>Demo Tech</span>
+            </button>
+
+            <button
+              className="btn-demo-role reporter-btn"
+              onClick={() => navigate('/asset/PROJ-01')}
+              title="Public user — no login required"
+            >
+              <QrCode size={16} />
+              <span>Public Portal</span>
+            </button>
+          </div>
+
+          <p style={{ marginTop: '0.75rem', fontSize: '0.85rem', opacity: 0.85 }}>
+            Public users scan QR codes to report issues — no account needed.
           </p>
         </div>
-
-        {/* DEMO ACCREDITATIONS WORKSPACE SHORTCUT */}
-        {!isSignUp && (
-          <div className="demo-shortcuts-panel">
-            <div className="demo-title">
-              <SparklesIcon />
-              <span>Evaluator Demo Shortcuts</span>
-            </div>
-            <p>Bypass credential setups. Instantly log in with pre-configured authority roles to review dashboard panels:</p>
-            
-            <div className="demo-buttons-grid">
-              <button className="btn-demo-role admin-btn" onClick={() => handleDemoLogin('Admin')} title="Log in as Administrator">
-                <Shield size={16} />
-                <span>Demo Admin</span>
-              </button>
-              
-              <button className="btn-demo-role tech-btn" onClick={() => handleDemoLogin('Technician')} title="Log in as Assigned Technician">
-                <Wrench size={16} />
-                <span>Demo Tech</span>
-              </button>
-
-              <button className="btn-demo-role reporter-btn" onClick={() => handleDemoLogin('Reporter')} title="Log in as Public User">
-                <User size={16} />
-                <span>Demo User</span>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-// Simple internal icon component for elegance
 function SparklesIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px', color: '#10b981' }}>

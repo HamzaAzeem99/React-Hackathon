@@ -170,6 +170,15 @@ export const storage = {
     }
   },
 
+  deleteAsset: (assetId) => {
+    const assets = storage.getAssets();
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) throw new Error('Asset not found');
+    const filtered = assets.filter(a => a.id !== assetId);
+    localStorage.setItem("maintainiq_assets", JSON.stringify(filtered));
+    return asset;
+  },
+
   getIssues: () => {
     initStorage();
     return JSON.parse(localStorage.getItem("maintainiq_issues"));

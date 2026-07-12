@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './utils/supabase';
+import { getUserRole, canAccessDashboard, hasPermission, PERMISSIONS } from './utils/permissions';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import RegisterAsset from './pages/RegisterAsset';
 import PublicAsset from './pages/PublicAsset';
 import ReportIssue from './pages/ReportIssue';
+import TrackIssue from './pages/TrackIssue';
 
-// Premium top-bar loading indicator
 function TopLoadingBar({ active }) {
   const [width, setWidth] = useState(0);
   const [visible, setVisible] = useState(false);
@@ -72,7 +73,6 @@ function App() {
   };
 
   useEffect(() => {
-    // Sync theme class to document body for global CSS effects
     if (darkMode) {
       document.body.classList.add('dark-theme');
       document.body.classList.remove('light-theme');
@@ -83,14 +83,12 @@ function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    // 1. Check if mock session exists
     if (mockSession) {
       setSession({ user: mockSession });
       setLoading(false);
       return;
     }
 
-    // 2. Check Supabase session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setSession(session);
@@ -101,9 +99,7 @@ function App() {
       setLoading(false);
     });
 
-    // 3. Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      // Only overwrite if mock session is not active
       if (!localStorage.getItem('maintainiq_mock_session')) {
         setSession(session);
       }
@@ -170,50 +166,48 @@ function App() {
     );
   }
 
-  const hasAccess = !!session;
+  const userRole = session ? getUserRole(session.user) : null;
+  const hasDashboardAccess = canAccessDashboard(userRole);
 
   return (
     <Router>
       <TopLoadingBar active={globalLoading} />
       <Routes>
-        {/* Login Page Route */}
         <Route
           path="/login"
-          element={!hasAccess ? (
+          element={!hasDashboardAccess ? (
             <Login onLoginSuccess={handleLoginSuccess} darkMode={darkMode} toggleTheme={toggleTheme} setGlobalLoading={setGlobalLoading} />
           ) : (
             <Navigate to="/" />
           )}
         />
 
-        {/* Protected Dashboard Route */}
         <Route
           path="/"
-          element={hasAccess ? (
+          element={hasDashboardAccess ? (
             <Home session={session} handleLogout={handleLogout} darkMode={darkMode} toggleTheme={toggleTheme} setGlobalLoading={setGlobalLoading} />
           ) : (
             <Navigate to="/login" />
           )}
         />
 
-        {/* Public Asset Pages */}
         <Route path="/asset/:assetCode" element={<PublicAsset darkMode={darkMode} toggleTheme={toggleTheme} setGlobalLoading={setGlobalLoading} />} />
-        
-        {/* Public Issue Report Page */}
         <Route path="/report-issue/:assetId" element={<ReportIssue darkMode={darkMode} toggleTheme={toggleTheme} setGlobalLoading={setGlobalLoading} />} />
+        <Route path="/track-issue" element={<TrackIssue darkMode={darkMode} toggleTheme={toggleTheme} />} />
+        <Route path="/track-issue/:ticketNumber" element={<TrackIssue darkMode={darkMode} toggleTheme={toggleTheme} />} />
 
-        {/* Protected Asset Registration Page */}
         <Route
           path="/register-asset"
-          element={hasAccess ? (
-            <RegisterAsset session={session} darkMode={darkMode} toggleTheme={toggleTheme} setGlobalLoading={setGlobalLoading} />
-          ) : (
-            <Navigate to="/login" />
-          )}
+          element={
+            hasDashboardAccess && hasPermission(userRole, PERMISSIONS.CREATE_ASSETS) ? (
+              <RegisterAsset session={session} darkMode={darkMode} toggleTheme={toggleTheme} setGlobalLoading={setGlobalLoading} />
+            ) : (
+              <Navigate to={hasDashboardAccess ? '/' : '/login'} />
+            )
+          }
         />
 
-        {/* Auto Redirect */}
-        <Route path="*" element={<Navigate to={hasAccess ? "/" : "/login"} />} />
+        <Route path="*" element={<Navigate to={hasDashboardAccess ? "/" : "/login"} />} />
       </Routes>
     </Router>
   );

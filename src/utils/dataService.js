@@ -123,6 +123,22 @@ export const dataService = {
     }
   },
 
+  deleteAsset: async (assetId) => {
+    const deleted = storage.deleteAsset(assetId);
+    try {
+      const { error } = await supabase.from('assets').delete().eq('id', assetId);
+      if (error) throw error;
+    } catch (err) {
+      console.warn("Supabase asset delete failed:", err.message);
+    }
+    return deleted;
+  },
+
+  getIssueByNumber: async (ticketNumber) => {
+    const issues = storage.getIssues();
+    return issues.find(i => i.issue_number.toUpperCase() === ticketNumber.toUpperCase().trim()) || null;
+  },
+
   // --- ISSUE MANAGEMENT ---
   getIssues: async () => {
     try {

@@ -43,6 +43,8 @@ function ReportIssue({ darkMode, toggleTheme, setGlobalLoading }) {
   const [patternWarning, setPatternWarning] = useState('');
   const [wasAiSuggested, setWasAiSuggested] = useState(false);
   const [isUserEdited, setIsUserEdited] = useState(false);
+  const [screenshot, setScreenshot] = useState(null);
+  const [submittedTicket, setSubmittedTicket] = useState(null);
 
   useEffect(() => {
     async function loadAsset() {
@@ -163,6 +165,14 @@ function ReportIssue({ darkMode, toggleTheme, setGlobalLoading }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStepIndex, triageSteps]);
 
+  const handleScreenshotUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setScreenshot(reader.result);
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!reporterName.trim() || !rawComplaint.trim()) return;
@@ -188,6 +198,8 @@ function ReportIssue({ darkMode, toggleTheme, setGlobalLoading }) {
       is_edited: isUserEdited,
       possible_causes: wasAiSuggested ? finalCauses : '',
       safety_checks: wasAiSuggested ? finalChecks : '',
+      screenshot: screenshot || '',
+      reporter_email: reporterEmail,
       created_at: new Date().toISOString()
     };
 
@@ -206,11 +218,9 @@ function ReportIssue({ darkMode, toggleTheme, setGlobalLoading }) {
       // 3. Update asset status
       await dataService.updateAssetStatus(asset.asset_code, "Issue Reported");
 
-      setTimeout(() => {
-        setSubmitting(false);
-        setGlobalLoading(false);
-        navigate(`/asset/${asset.asset_code}`);
-      }, 1000);
+      setSubmittedTicket({ number: ticketNumber, email: reporterEmail });
+      setSubmitting(false);
+      setGlobalLoading(false);
 
     } catch (err) {
       alert("Submission error: " + err.message);
@@ -235,7 +245,30 @@ function ReportIssue({ darkMode, toggleTheme, setGlobalLoading }) {
           <HelpCircle size={64} className="error-icon" />
           <h2>Asset Profile Not Found</h2>
           <p>The asset identifier is invalid or does not exist in the centralized register.</p>
-          <button className="btn-secondary" onClick={() => navigate('/login')}>Return to Admin Control</button>
+          <button className="btn-secondary" onClick={() => navigate('/asset/PROJ-01')}>Return to Public Portal</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (submittedTicket) {
+    return (
+      <div className={`report-issue-container ${darkMode ? 'dark-theme' : 'light-theme'}`}>
+        <div className="report-issue-card">
+          <h2>Issue Reported Successfully</h2>
+          <p>Your ticket <strong>{submittedTicket.number}</strong> has been submitted.</p>
+          <p>Save this ticket number to track your issue status.</p>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+            <button
+              className="btn-submit-main"
+              onClick={() => navigate(`/track-issue/${submittedTicket.number}?email=${encodeURIComponent(submittedTicket.email)}`)}
+            >
+              Track My Issue
+            </button>
+            <button className="btn-secondary" onClick={() => navigate(`/asset/${asset.asset_code}`)}>
+              Back to Asset Page
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -320,6 +353,14 @@ function ReportIssue({ darkMode, toggleTheme, setGlobalLoading }) {
                 required
               ></textarea>
               <span className="helper-hint"><Info size={12} /> Explain clearly for a better AI analysis report.</span>
+            </div>
+
+            <div className="form-group-3d">
+              <label>Upload Screenshot (Optional)</label>
+              <input type="file" accept="image/*" onChange={handleScreenshotUpload} />
+              {screenshot && (
+                <img src={screenshot} alt="Screenshot preview" style={{ maxWidth: '100%', maxHeight: '120px', marginTop: '0.5rem', borderRadius: '8px' }} />
+              )}
             </div>
 
             <div className="triage-helper-zone">

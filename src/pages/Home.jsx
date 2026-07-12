@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../utils/dataService';
+import { getUserRole, hasPermission, isIssueAssignedToUser, PERMISSIONS, ROLES } from '../utils/permissions';
 import { 
   Boxes, 
   AlertTriangle, 
@@ -21,7 +22,11 @@ import {
   UserCheck,
   FileText,
   AlertOctagon,
-  Sparkles
+  Settings,
+  Pencil,
+  Trash2,
+  CalendarClock,
+  Upload
 } from 'lucide-react';
 import './Home.css';
 
@@ -30,17 +35,17 @@ const TECHNICIANS = ["Demo Technician", "Sarah Connor (Electronics)", "Dave Mill
 function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }) {
   const navigate = useNavigate();
   const user = session.user;
-  const userRole = user.role || 'Admin'; // Admin, Technician, Reporter
+  const userRole = getUserRole(user);
   
   const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState([]);
   const [issues, setIssues] = useState([]);
   
-  // Dashboard Analytics
   const [stats, setStats] = useState({ totalAssets: 0, activeIssues: 0, underMaintenance: 0, outOfService: 0 });
 
-  // Filters & Search
-  const [activeTab, setActiveTab] = useState('assets'); // assets, issues
+  const [activeTab, setActiveTab] = useState(
+    userRole === ROLES.TECHNICIAN ? 'issues' : 'assets'
+  );
   const [assetSearch, setAssetSearch] = useState('');
   const [assetCategoryFilter, setAssetCategoryFilter] = useState('');
   const [assetStatusFilter, setAssetStatusFilter] = useState('');
@@ -73,6 +78,18 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
     return d.toISOString().split('T')[0];
   });
   const [resolveError, setResolveError] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState(null);
+
+  // Admin: edit asset, schedule maintenance, org settings
+  const [editingAsset, setEditingAsset] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [schedulingAsset, setSchedulingAsset] = useState(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [showOrgSettings, setShowOrgSettings] = useState(false);
+  const [orgName, setOrgName] = useState(() => localStorage.getItem('maintainiq_org_name') || 'MaintainIQ Corp');
+  const [orgContact, setOrgContact] = useState(() => localStorage.getItem('maintainiq_org_contact') || 'admin@maintainiq.com');
 
   // Copy success feedback
   const [copiedCode, setCopiedCode] = useState(null);
@@ -240,6 +257,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
         notes: maintNotes,
         parts_replaced: partsReplaced,
         cost: Number(maintCost),
+        evidence: evidenceFile || resolvingIssue.evidence || '',
         resolved_at: new Date().toISOString()
       };
 
@@ -269,6 +287,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
       setMaintNotes('');
       setPartsReplaced('');
       setMaintCost(0);
+      setEvidenceFile(null);
       await fetchAllData();
     } catch (err) {
       setResolveError(err.message);
@@ -278,6 +297,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
   };
 
   const handleResetData = () => {
+    if (!hasPermission(userRole, PERMISSIONS.RESET_DATA)) return;
     if (window.confirm("Are you sure you want to restore preloaded demo assets and wipe issues?")) {
       setGlobalLoading(true);
       setTimeout(() => {
@@ -296,6 +316,100 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
     );
   };
 
+  const handleEditAsset = async (e) => {
+    e.preventDefault();
+    if (!editingAsset || !hasPermission(userRole, PERMISSIONS.EDIT_ASSETS)) return;
+    setGlobalLoading(true);
+    try {
+      const updated = {
+        ...editingAsset,
+        name: editName.trim(),
+        category: editCategory,
+        location: editLocation.trim()
+      };
+      await dataService.saveAsset(updated);
+      await dataService.addHistory(
+        editingAsset.asset_code,
+        user.full_name || 'Admin',
+        'Asset Updated',
+        `Updated by administrator: ${editName.trim()}`
+      );
+      setEditingAsset(null);
+      await fetchAllData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
+  const handleDeleteAsset = async (asset) => {
+    if (!hasPermission(userRole, PERMISSIONS.DELETE_ASSETS)) return;
+    if (!window.confirm(`Delete asset "${asset.name}" (${asset.asset_code})? This cannot be undone.`)) return;
+    setGlobalLoading(true);
+    try {
+      await dataService.deleteAsset(asset.id);
+      setSelectedAsset(null);
+      await fetchAllData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
+  const handleScheduleMaintenance = async (e) => {
+    e.preventDefault();
+    if (!schedulingAsset || !hasPermission(userRole, PERMISSIONS.SCHEDULE_MAINTENANCE)) return;
+    setGlobalLoading(true);
+    try {
+      const updated = { ...schedulingAsset, next_service: scheduleDate };
+      await dataService.saveAsset(updated);
+      await dataService.addHistory(
+        schedulingAsset.asset_code,
+        user.full_name || 'Admin',
+        'Maintenance Scheduled',
+        `Next service scheduled for ${scheduleDate}`
+      );
+      setSchedulingAsset(null);
+      await fetchAllData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
+  const handleSaveOrgSettings = (e) => {
+    e.preventDefault();
+    if (!hasPermission(userRole, PERMISSIONS.ORG_SETTINGS)) return;
+    localStorage.setItem('maintainiq_org_name', orgName.trim());
+    localStorage.setItem('maintainiq_org_contact', orgContact.trim());
+    setShowOrgSettings(false);
+  };
+
+  const openEditAsset = (asset) => {
+    setEditingAsset(asset);
+    setEditName(asset.name);
+    setEditCategory(asset.category);
+    setEditLocation(asset.location);
+  };
+
+  const openScheduleMaintenance = (asset) => {
+    setSchedulingAsset(asset);
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    setScheduleDate(asset.next_service || d.toISOString().split('T')[0]);
+  };
+
+  const handleEvidenceUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setEvidenceFile(reader.result);
+    reader.readAsDataURL(file);
+  };
+
   // Filter logic
   const filteredAssets = assets.filter(a => {
     const matchSearch = a.name.toLowerCase().includes(assetSearch.toLowerCase()) || 
@@ -308,7 +422,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
 
   // Technician sees only assigned, Admin sees all
   const filteredIssues = issues.filter(i => {
-    if (userRole === 'Technician' && i.assigned_to !== user.full_name) {
+    if (userRole === ROLES.TECHNICIAN && !isIssueAssignedToUser(i, user)) {
       return false;
     }
     const matchSearch = i.title.toLowerCase().includes(issueSearch.toLowerCase()) ||
@@ -338,16 +452,24 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
             <span>{darkMode ? 'Day Mode' : 'Night Mode'}</span>
           </button>
           
-          {userRole === 'Admin' && (
+          {hasPermission(userRole, PERMISSIONS.CREATE_ASSETS) && (
             <button className="btn-primary-green-3d" onClick={() => navigate('/register-asset')}>
               <PlusCircle size={18} />
               <span>Register Asset</span>
             </button>
           )}
 
-          <button className="btn-reset-data" onClick={handleResetData} title="Reset Demo Data">
-            <RefreshCw size={14} /> Reset Data
-          </button>
+          {hasPermission(userRole, PERMISSIONS.ORG_SETTINGS) && (
+            <button className="btn-reset-data" onClick={() => setShowOrgSettings(true)} title="Organization Settings">
+              <Settings size={14} /> Org Settings
+            </button>
+          )}
+
+          {hasPermission(userRole, PERMISSIONS.RESET_DATA) && (
+            <button className="btn-reset-data" onClick={handleResetData} title="Reset Demo Data">
+              <RefreshCw size={14} /> Reset Data
+            </button>
+          )}
 
           <button className="btn-logout-green" onClick={handleLogout} title="Sign Out of System">
             <LogOut size={18} />
@@ -355,7 +477,8 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
         </div>
       </header>
 
-      {/* --- STATS OVERVIEW --- */}
+      {/* --- STATS OVERVIEW (Admin only) --- */}
+      {hasPermission(userRole, PERMISSIONS.ANALYTICS) && (
       <section className="stats-grid animate-fade-in">
         <div className="stat-card-green-3d total-assets">
           <div className="stat-icon-container"><Boxes size={28} /></div>
@@ -389,6 +512,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
           </div>
         </div>
       </section>
+      )}
 
       {/* --- DASHBOARD CONTENT SPLIT GRID --- */}
       <div className="dashboard-content-split">
@@ -398,22 +522,24 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
           
           {/* TAB NAVIGATION */}
           <div className="dashboard-tabs">
+            {hasPermission(userRole, PERMISSIONS.VIEW_ALL_ASSETS) && (
             <button 
               className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
               onClick={() => setActiveTab('assets')}
             >
               📦 Corporate Asset Register
             </button>
+            )}
             <button 
               className={`tab-btn ${activeTab === 'issues' ? 'active' : ''}`}
               onClick={() => setActiveTab('issues')}
             >
-              🔔 Maintenance Tickets {filteredIssues.length > 0 && <span className="tab-indicator">{filteredIssues.length}</span>}
+              🔔 {userRole === ROLES.TECHNICIAN ? 'My Assigned Issues' : 'Maintenance Tickets'} {filteredIssues.length > 0 && <span className="tab-indicator">{filteredIssues.length}</span>}
             </button>
           </div>
 
-          {/* TAB 1: ASSETS */}
-          {activeTab === 'assets' && (
+          {/* TAB 1: ASSETS (Admin only) */}
+          {activeTab === 'assets' && hasPermission(userRole, PERMISSIONS.VIEW_ALL_ASSETS) && (
             <div className="tab-content-card animate-fade-in">
               <div className="filter-search-row">
                 <div className="search-box-3d">
@@ -446,7 +572,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                 </div>
               </div>
 
-              {userRole === 'Admin' && filteredAssets.length > 0 && (
+              {hasPermission(userRole, PERMISSIONS.QR_GENERATION) && filteredAssets.length > 0 && (
                 <div className="bulk-qr-actions-row">
                   <button 
                     className="btn-bulk-qr" 
@@ -467,7 +593,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                   <table className="dashboard-table">
                     <thead>
                       <tr>
-                        {userRole === 'Admin' && <th style={{ width: '40px' }}>Select</th>}
+                        {hasPermission(userRole, PERMISSIONS.QR_GENERATION) && <th style={{ width: '40px' }}>Select</th>}
                         <th>Code</th>
                         <th>Asset Name</th>
                         <th>Category</th>
@@ -483,7 +609,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                           onClick={() => handleSelectAsset(asset)}
                           className={selectedAsset && selectedAsset.id === asset.id ? 'active-row' : ''}
                         >
-                          {userRole === 'Admin' && (
+                          {hasPermission(userRole, PERMISSIONS.QR_GENERATION) && (
                             <td onClick={(e) => e.stopPropagation()}>
                               <input 
                                 type="checkbox"
@@ -633,7 +759,26 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
 
                 <hr className="divider" />
 
-                {/* QR BARCODE LABEL PREVIEW CONTAINER */}
+                {hasPermission(userRole, PERMISSIONS.EDIT_ASSETS) && (
+                  <div className="admin-asset-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    <button className="qr-btn" onClick={() => openEditAsset(selectedAsset)}>
+                      <Pencil size={14} /> Edit Asset
+                    </button>
+                    {hasPermission(userRole, PERMISSIONS.SCHEDULE_MAINTENANCE) && (
+                      <button className="qr-btn" onClick={() => openScheduleMaintenance(selectedAsset)}>
+                        <CalendarClock size={14} /> Schedule Maintenance
+                      </button>
+                    )}
+                    {hasPermission(userRole, PERMISSIONS.DELETE_ASSETS) && (
+                      <button className="qr-btn" style={{ color: '#ef4444' }} onClick={() => handleDeleteAsset(selectedAsset)}>
+                        <Trash2 size={14} /> Delete Asset
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* QR BARCODE LABEL PREVIEW CONTAINER (Admin only) */}
+                {hasPermission(userRole, PERMISSIONS.QR_GENERATION) && (
                 <div className="qr-barcode-preview-box">
                   <h4>Printable Asset Label Identification</h4>
                   <div className="print-label-sticker" id={`label-${selectedAsset.asset_code}`}>
@@ -666,7 +811,10 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                     </a>
                   </div>
                 </div>
+                )}
 
+                {hasPermission(userRole, PERMISSIONS.VIEW_HISTORY) && (
+                <>
                 <hr className="divider" />
 
                 {/* HISTORY TIMELINE */}
@@ -692,6 +840,8 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                     </div>
                   )}
                 </div>
+                </>
+                )}
               </div>
             </div>
           )}
@@ -746,12 +896,15 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                   <p className="val bold-text text-green-dark">{selectedIssue.status}</p>
                 </div>
 
-                {selectedIssue.notes && (
+                {selectedIssue.notes && (userRole === ROLES.ADMIN || isIssueAssignedToUser(selectedIssue, user)) && (
                   <div className="resolved-work-box animate-fade-in">
                     <h5>Resolved Work Summary</h5>
                     <p><strong>Notes:</strong> {selectedIssue.notes}</p>
                     {selectedIssue.parts_replaced && <p><strong>Parts replaced:</strong> {selectedIssue.parts_replaced}</p>}
                     <p><strong>Total maintenance cost:</strong> ${selectedIssue.cost}</p>
+                    {selectedIssue.evidence && (
+                      <p><strong>Evidence:</strong> <img src={selectedIssue.evidence} alt="Maintenance evidence" style={{ maxWidth: '100%', maxHeight: '120px', marginTop: '0.5rem', borderRadius: '8px' }} /></p>
+                    )}
                     <p><strong>Resolution timestamp:</strong> {new Date(selectedIssue.resolved_at).toLocaleString()}</p>
                   </div>
                 )}
@@ -763,14 +916,14 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                   <h4>Workflow Status Controls</h4>
 
                   {/* 1. Admin assigns technician */}
-                  {userRole === 'Admin' && selectedIssue.status === 'Reported' && (
+                  {hasPermission(userRole, PERMISSIONS.ASSIGN_TECHNICIAN) && selectedIssue.status === 'Reported' && (
                     <button className="btn-workflow assign" onClick={() => setAssigningIssue(selectedIssue)}>
                       <UserCheck size={16} /> Assign Technician
                     </button>
                   )}
 
                   {/* 2. Technician workflow steppers */}
-                  {userRole === 'Technician' && selectedIssue.assigned_to === user.full_name && (
+                  {userRole === ROLES.TECHNICIAN && isIssueAssignedToUser(selectedIssue, user) && (
                     <div className="tech-actions-wrapper">
                       {selectedIssue.status === 'Assigned' && (
                         <button 
@@ -811,8 +964,8 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                     </div>
                   )}
 
-                  {/* 3. Reopening Ticket */}
-                  {selectedIssue.status === 'Resolved' && (
+                  {/* 3. Reopening Ticket (Admin only) */}
+                  {hasPermission(userRole, PERMISSIONS.REOPEN_TICKET) && selectedIssue.status === 'Resolved' && (
                     <button 
                       className="btn-workflow reopen"
                       onClick={() => handleStatusUpdate(selectedIssue, 'Reopened')}
@@ -821,7 +974,7 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                     </button>
                   )}
 
-                  {!selectedIssue.assigned_to && selectedIssue.status === 'Reported' && userRole === 'Technician' && (
+                  {!selectedIssue.assigned_to && selectedIssue.status === 'Reported' && userRole === ROLES.TECHNICIAN && (
                     <p className="workflow-hint">Waiting for system administrator to assign this ticket.</p>
                   )}
                 </div>
@@ -834,7 +987,11 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
             <div className="inspector-placeholder">
               <FileText size={64} className="placeholder-icon" />
               <h3>Inspector Display</h3>
-              <p>Select any corporate asset or maintenance ticket to inspect details, QR barcodes, timelines, and status workflow controls.</p>
+              <p>
+                {userRole === ROLES.TECHNICIAN
+                  ? 'Select an assigned maintenance ticket to inspect details and update workflow status.'
+                  : 'Select any corporate asset or maintenance ticket to inspect details, QR barcodes, timelines, and status workflow controls.'}
+              </p>
             </div>
           )}
 
@@ -915,6 +1072,14 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
               </div>
 
               <div className="form-group-3d">
+                <label><Upload size={14} /> Upload Evidence / Images</label>
+                <input type="file" accept="image/*" onChange={handleEvidenceUpload} />
+                {evidenceFile && (
+                  <img src={evidenceFile} alt="Evidence preview" style={{ maxWidth: '100%', maxHeight: '100px', marginTop: '0.5rem', borderRadius: '8px' }} />
+                )}
+              </div>
+
+              <div className="form-group-3d">
                 <label>Next Preventative Service Schedule</label>
                 <input 
                   type="date" 
@@ -970,6 +1135,81 @@ function Home({ session, handleLogout, darkMode, toggleTheme, setGlobalLoading }
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 4: EDIT ASSET --- */}
+      {editingAsset && (
+        <div className="modal-overlay">
+          <div className="modal-card animate-slide-up">
+            <h3>Edit Asset {editingAsset.asset_code}</h3>
+            <form onSubmit={handleEditAsset} className="modal-form">
+              <div className="form-group-3d">
+                <label>Asset Name</label>
+                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required />
+              </div>
+              <div className="form-group-3d">
+                <label>Category</label>
+                <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
+                  <option value="Electronics">Electronics</option>
+                  <option value="Furniture">Furniture</option>
+                  <option value="Plumbing">Plumbing</option>
+                  <option value="HVAC / AC">HVAC / AC</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="form-group-3d">
+                <label>Location</label>
+                <input type="text" value={editLocation} onChange={(e) => setEditLocation(e.target.value)} required />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-modal-cancel" onClick={() => setEditingAsset(null)}>Cancel</button>
+                <button type="submit" className="btn-modal-submit">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 5: SCHEDULE MAINTENANCE --- */}
+      {schedulingAsset && (
+        <div className="modal-overlay">
+          <div className="modal-card animate-slide-up">
+            <h3>Schedule Maintenance — {schedulingAsset.name}</h3>
+            <form onSubmit={handleScheduleMaintenance} className="modal-form">
+              <div className="form-group-3d">
+                <label>Next Service Date</label>
+                <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} required />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-modal-cancel" onClick={() => setSchedulingAsset(null)}>Cancel</button>
+                <button type="submit" className="btn-modal-submit">Schedule</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 6: ORGANIZATION SETTINGS --- */}
+      {showOrgSettings && (
+        <div className="modal-overlay">
+          <div className="modal-card animate-slide-up">
+            <h3><Settings size={18} /> Organization Settings</h3>
+            <form onSubmit={handleSaveOrgSettings} className="modal-form">
+              <div className="form-group-3d">
+                <label>Organization Name</label>
+                <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)} required />
+              </div>
+              <div className="form-group-3d">
+                <label>Admin Contact Email</label>
+                <input type="email" value={orgContact} onChange={(e) => setOrgContact(e.target.value)} required />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-modal-cancel" onClick={() => setShowOrgSettings(false)}>Cancel</button>
+                <button type="submit" className="btn-modal-submit">Save Settings</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
